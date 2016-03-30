@@ -87,92 +87,46 @@ CInspect::ERR_INSP CInspectPrivateMOM::train(cv::Mat &image)
 	if(err != CInspect::OK)
 		return err;
 
-	err = runScoring();
+	err = runScoring(MOMExtract);
 	if(err != CInspect::OK)
 		return err;
 
+	GlobalLogMsg("**** MOMData ****\n");
+	PrintMat(GetGlobalLog(),&m_FeatMat(cv::Rect(0,100,MOMDATASIZE,1)));
+	m_ModelKnowledge[100].covar.LogCovar();	// Debug of incremental
+
 	return err;
 }
-CInspect::ERR_INSP CInspectPrivateMOM::trainEx(cv::Mat &image)
+CInspect::ERR_INSP CInspectPrivateMOM::trainPass2(cv::Mat &image)
 {
 	// call generic inspect which calls PreProc() if needed
-	CInspect::ERR_INSP err = CInspectPrivate::inspect(image);
+	CInspect::ERR_INSP err = CInspectPrivate::trainPass2(image);
 	if(err != CInspect::OK)
 		return err;
-	err = CInspectPrivate::trainEx(image);
+
+	err = runScoring(MOMExtract);
+	if(err != CInspect::OK)
+		return err;
 
 	return err;
 }
 
-CInspect::ERR_INSP CInspectPrivateMOM::optimize()
+CInspect::ERR_INSP CInspectPrivateMOM::inspect(cv::Mat &image, int *failIndex)
 {
-	CInspect::ERR_INSP err = CInspectPrivate::optimize();
-
-	return err;
-}
-CInspect::ERR_INSP CInspectPrivateMOM::inspect(cv::Mat &image)
-{
-	m_TrainMode = INSPECT;
 	// call generic inspect (calls PreProc() if needed)
-	CInspect::ERR_INSP err = CInspectPrivate::inspect(image);
+	CInspect::ERR_INSP err = CInspectPrivate::inspect(image,failIndex);
 	if(err != CInspect::OK)
 		return err;
 
-	err = runScoring();
+	err = runScoring(MOMExtract);
 	if(err != CInspect::OK)
 		return err;
 
 	// for Inspecting,  return FAIL if different
-	m_MaxScore = 0.0f;
 	err = CInspect::OK;
 	m_MahalaCount = 0;
-	m_FinalScore = 1.0F;
-	float Score;
-	for(int i=0; i<(int)m_TileVec.size(); i++)
-	{
-		TILE &T = m_TileVec[i];
-		Score = m_ModelKnowledge[i].covar.MahalanobisScore(T.scoreRaw, m_RawScoreDiv);
-		m_FinalScore = Score < m_FinalScore ? Score : m_FinalScore; 
-		UpdateRawScore(T);
-		T.status = CInspect::OK;
-		if(Score < m_InspectThresh)	// reject if different
-		{
-			T.status = CInspect::FAIL;
-			err = CInspect::FAIL;
-		}
-		cv::Rect roi;
-		cv::Mat temp;
-		if(T.status == CInspect::FAIL)
-		{
-			annotate(cv::Rect(T.col,T.row,T.tilewidth,T.tileheight));
-		}
-	}
-	return err;
-}
 
-CInspect::ERR_INSP CInspectPrivateMOM::runScoring()
-{
-	CInspect::ERR_INSP err = CInspect::OK;
-	switch(m_TrainMode)
-	{
-	case TRAIN:
-		err = runExtract(MOMExtract);
-		err = runTrain();	// use default trainproc
-		break;
-	case INSPECT:
-		err = runExtract(MOMExtract);
-		err = runInspect();	// use default Inspectproc
-		break;
-	default:
-		break;
-	}
-
-	if( (m_DebugFile != NULL) )
-	{
-		cv::Mat temp = m_FeatMat(cv::Rect(0,100,m_FeatMat.cols,1));
-		putFloatMat(m_DebugFile, &temp,"", "\n");
-		putFloatMat(m_DebugFile, m_ModelKnowledge[100].covar.m_pM12,",,,,,","\n");
-	}
+	FindNewWorstScore(failIndex);
 
 	return err;
 }
@@ -181,6 +135,7 @@ CInspect::ERR_INSP CInspectPrivateMOM::runScoring()
 //*********** Specific Code for Specific Feature data **********************
 static void MOMExtract(TILE &t, cv::Mat &Img,cv::Mat &FeatMat)
 {
+	t.status = CInspect::ERR_INSP::OK;
 
 	cv::Mat temp = Img(cv::Rect(t.col,t.row,t.tilewidth,t.tileheight));
 
@@ -210,11 +165,6 @@ static void MOMExtract(TILE &t, cv::Mat &Img,cv::Mat &FeatMat)
 		*pFeat++ = (float)Mom.mu03;
 	}
 
-		if( (t.Index == 100) )
-		{
-			cv::Mat temp = FeatMat(cv::Rect(0,100,FeatMat.cols,1));
-			//putFloatMat(m_DebugFile, &temp);
-		}
 	t.datasize = MOMDATASIZE;
 }
 

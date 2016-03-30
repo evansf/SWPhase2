@@ -17,7 +17,6 @@ CMaskDlg::CMaskDlg(QWidget *parent)
 	ui.setupUi(this);
 	ui.Display1->setDisplayMode(QTDisplay::FIT_SCALE);
 	m_DrawMode = BOX;
-//	m_RecentDraw = OFF;
 	ui.Display1->SetSnap(SNAP);	// closer closes polygon
 	m_AlignModels.clear();
 
@@ -35,8 +34,6 @@ CMaskDlg::CMaskDlg(QWidget *parent)
 	connect(ui.Display1,SIGNAL(PolyDrawn()),this,SLOT(on_PolyDrawn()));
 	connect(ui.Display1,SIGNAL(RectDrawn(QRect)),this,SLOT(on_RectDrawn(QRect)));
 	connect(ui.ClearAlignModelsButton,SIGNAL(clicked()),this,SLOT(on_ClearAlignModelsButton_clicked())); 
-//	connect(ui.AddAlignModelsButton,SIGNAL(clicked()),this,SLOT(on_AddAlignModelsButton_clicked())); 
-//	connect(ui.Display1,SIGNAL(clicked(QMouseEvent*)),this,SLOT(on_DisplayClicked(QMouseEvent*)));
 	connect(ui.Display1,SIGNAL(MousePress(QMouseEvent*)),this,SLOT(on_MousePress(QMouseEvent*)));
 	connect(ui.Display1,SIGNAL(MouseRelease(QMouseEvent*)),this,SLOT(on_MouseRelease(QMouseEvent*)));
 }
@@ -176,12 +173,7 @@ void CMaskDlg::on_saveButton_Clicked()
 	// save the cropped image as the model
 	cv::imwrite(ModelFile.toUtf8().constData(),qimage_to_mat_cpy(m_CroppedImg,CV_8UC1));
 
-	// rescale mask and then crop
 	cv::Mat mask = qimage_to_mat_cpy(QMask.toImage(),CV_8UC4);
-	// cv::resize(mask,mask,cvSize(m_CroppedImg.width(),m_CroppedImg.height()));
-	// crop the mask
-	// mask = mask(m_Params.m_Crop);
-	// threshold to 8bit image
 	std::vector<cv::Mat> planes;
 	cv::split(mask,planes);
 	cv::threshold(planes[3],planes[3],TRANSLUCENCY+1,255,CV_THRESH_BINARY);
@@ -200,7 +192,7 @@ void CMaskDlg::on_saveButton_Clicked()
 
 void CMaskDlg::on_cancelButton_Clicked()
 {
-	exit( -1);
+	done( -1);
 }
 void CMaskDlg::ShowMask()
 {
@@ -216,7 +208,6 @@ void CMaskDlg::ShowMask()
 		ui.Display1->DrawRect(QRect(A.m_X,A.m_Y,A.m_Width,A.m_Height), Qt::yellow);
 	}
 
-//	m_RecentDraw = OFF;
 	ui.Display1->UpdateRoi();
 }
 void CMaskDlg::on_includeButton_Clicked()
@@ -292,7 +283,6 @@ void CMaskDlg::on_discardButton_Clicked()
 	ui.boxButton->setFont(f);
 	ui.polyButton->setFont(f);
 	m_PolyVec.clear();
-//	m_DrawMode = OFF;
 	m_RecentDraw = NONE;
 	ShowMask();
 }
@@ -313,13 +303,8 @@ void CMaskDlg::on_setCropButton_Clicked()
 	QColor C = Qt::lightGray;
 	C.setAlpha(TRANSLUCENCY);
 	QMask.fill(C);
-#if(0)
-	m_Img = m_CroppedImg.scaledToWidth(512);
-	m_Mask = QMask.scaledToWidth(512);
-#else
 	m_Img = m_CroppedImg;
 	m_Mask = QMask;
-#endif
 	ui.Display1->AttachQImage(m_Img);
 	ShowMask();
 	m_RecentDraw = NONE;

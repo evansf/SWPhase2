@@ -18,8 +18,8 @@
 #include "opencv2/imgproc/imgproc.hpp"
 #include "MaskDlg.h"
 #include "ROCdlg.h"
-#include "Histdlg.h"
 #include "examinedlg.h"
+#include "Retraindlg.h"
 
 // forward declaration of local functions
 static void DirDlg(QString &dirName);
@@ -48,6 +48,7 @@ DemoQtGUI::DemoQtGUI(QWidget *parent)
 	connect(ui.CreateButton,SIGNAL(clicked()),this,SLOT(on_CreateButton_Clicked()));
 	connect(ui.ResetButton,SIGNAL(clicked()),this,SLOT(on_Reset_Clicked()));
 	connect(ui.TrainButton,SIGNAL(clicked()),this,SLOT(on_TrainButton_Clicked()));
+	connect(ui.TrainPass2Button,SIGNAL(clicked()),this,SLOT(on_TrainPass2Button_Clicked()));
 	connect(ui.InspectButton,SIGNAL(clicked()),this,SLOT(on_InspectButton_Clicked()));
 	connect(ui.InspectTrainButton,SIGNAL(clicked()),this,SLOT(on_InspectTrainButton_Clicked()));
 	connect(ui.RunStatsButton,SIGNAL(clicked()),this,SLOT(on_RunStatsButton_Clicked()));
@@ -113,6 +114,7 @@ void DemoQtGUI::on_CreateButton_Clicked()
 		makeMask(filename,modelname,maskname,paramsname);
 		img.close();
 		LogMsg(QString("Model Created Using Dialog"));
+		m_Reset = false;
 	}
 	else
 	{
@@ -134,6 +136,7 @@ void DemoQtGUI::on_CreateButton_Clicked()
 		QMessageBox("ERROR!",msg,QMessageBox::Icon::Critical,QMessageBox::Button::Ok,0,0).exec();
 		return;
 	}
+	m_Pass2Complete = true;	// may not be needed
 
 	// Load the data from the valid files
 	m_ModelImg.load(modelname);
@@ -152,7 +155,7 @@ void DemoQtGUI::on_CreateButton_Clicked()
 	{
 		tilewidth=16; tileheight=16; stepcols=12; steprows=12;
 		datatype = CInspect::DCT;
-		ui.RawGainSpinBox->setValue(100000.0);
+		ui.RawGainSpinBox->setValue(20000.0);
 	}
 	else if(classname == QString("CInspectIntensity"))
 	{
@@ -164,13 +167,13 @@ void DemoQtGUI::on_CreateButton_Clicked()
 	{
 		tilewidth=4; tileheight=4; stepcols=4; steprows=4;
 		datatype = CInspect::WAVE;
-		ui.RawGainSpinBox->setValue(10000000.0);
+		ui.RawGainSpinBox->setValue(100000.0);
 	}
 	else if(classname == QString("CInspectMOM"))
 	{
 		tilewidth=8; tileheight=8; stepcols=8; steprows=8;
 		datatype = CInspect::MOM;
-		ui.RawGainSpinBox->setValue(5000.0);
+		ui.RawGainSpinBox->setValue(100.0);
 	}
 	else
 		return;
@@ -194,8 +197,9 @@ void DemoQtGUI::on_CreateButton_Clicked()
 }
 void DemoQtGUI::on_TrainButton_Clicked()
 {
-	m_pInspect->setLearnThresh(ui.LearnThreshSpinBox->value());
 	m_pInspect->setMustAlign(ui.AlignCheckBox->isChecked());
+	if(ui.ZScoreButton->isChecked())
+		m_Pass2Complete = false;
 	CInspect::ERR_INSP err = CInspect::OK;
 	QString msg;
 	QDir dir(m_TrainDir);
@@ -205,6 +209,7 @@ void DemoQtGUI::on_TrainButton_Clicked()
 	QString imgfilename;
 	QString loadName;
 	m_AvTime = 0.0;	m_ImgCount = 0;
+
 	foreach(imgfilename,list)
 	{
 		if(imgfilename.left(4) == QString("mask"))
@@ -265,14 +270,23 @@ void DemoQtGUI::on_TrainButton_Clicked()
 			}
 		}
 		LogMsg(msg);
-	}
+	}	// end of foreach
 
 	m_AvTime /= m_ImgCount;
 	ui.TimeTrainSpinBox->setValue(m_AvTime);
 	ui.MpixTrainSpinBox->setValue((m_ModelImg.width() * m_ModelImg.height())/(1000000 * m_AvTime));
+	on_OptimizeButton_Clicked();
 	ui.statusBar->showMessage("Ready",0);
 
 }
+void DemoQtGUI::on_TrainPass2Button_Clicked()
+{
+	m_pInspect->setPass2(true);
+	on_TrainButton_Clicked();
+	m_pInspect->setPass2(false);
+	m_Pass2Complete = true;
+}
+
 void DemoQtGUI::on_InspectTrainButton_Clicked()
 {
 	if(!m_pInspect->isOptimized())
@@ -282,12 +296,12 @@ void DemoQtGUI::on_InspectTrainButton_Clicked()
 		QMessageBox("ERROR!",msg,QMessageBox::Icon::Critical,QMessageBox::Button::Ok,0,0).exec();
 		return;
 	}
+	m_pInspect->setUseZScoreMode(ui.ZScoreButton->isChecked());
+	m_pInspect->setRawScoreDiv(ui.RawGainSpinBox->value());
 	ui.fpSpinBox->setValue(0);
 	ui.tnSpinBox->setValue(0);
 	ui.tpSpinBox->setValue(0);
 	ui.fnSpinBox->setValue(0);
-	m_pInspect->setInspectThresh(ui.InspectThreshSpinBox->value());
-	m_pInspect->setMustAlign(ui.AlignCheckBox->isChecked());
 	int pass, fail;
 	ui.DirActiveLabel->setText("TrainDir Should PASS ");
 	Inspect(m_TrainDir, &pass,&fail, false);
@@ -296,8 +310,6 @@ void DemoQtGUI::on_InspectTrainButton_Clicked()
 	ui.tpSpinBox->setValue(pass);
 	ui.fnSpinBox->setValue(fail);
 	ui.statusBar->showMessage("Ready",0);
-	ui.MeanLabel->setText(QString("%1").arg(m_pInspect->getMean(0)));
-	ui.SigmaLabel->setText(QString("%1").arg(m_pInspect->getSigma(0)));
 
 }
 void DemoQtGUI::on_InspectButton_Clicked()
@@ -309,32 +321,42 @@ void DemoQtGUI::on_InspectButton_Clicked()
 		QMessageBox("ERROR!",msg,QMessageBox::Icon::Critical,QMessageBox::Button::Ok,0,0).exec();
 		return;
 	}
-	m_pInspect->setInspectThresh(ui.InspectThreshSpinBox->value());
-	m_pInspect->setMustAlign(ui.AlignCheckBox->isChecked());
+	m_pInspect->setUseZScoreMode(ui.ZScoreButton->isChecked());
+	m_pInspect->setRawScoreDiv(ui.RawGainSpinBox->value());
+	ui.fpSpinBox->setValue(0);
+	ui.tnSpinBox->setValue(0);
+	ui.tpSpinBox->setValue(0);
+	ui.fnSpinBox->setValue(0);
 	int pass, fail;
-	ui.DirActiveLabel->setText("Should FAIL ");
-	Inspect(m_InspectFailDir, &pass,&fail,true);
-	ui.TimeFailSpinBox->setValue(m_AvTime);
-	ui.MpixFailSpinBox->setValue((m_ModelImg.width() * m_ModelImg.height())/(1000000 * m_AvTime));
-	ui.fpSpinBox->setValue(pass);
-	ui.tnSpinBox->setValue(fail);
-	ui.MeanLabel->setText(QString("%1").arg(m_pInspect->getMean(0)));
-	ui.SigmaLabel->setText(QString("%1").arg(m_pInspect->getSigma(0)));
-	if(m_Abort)
-		return;
 	ui.DirActiveLabel->setText("Should PASS ");
 	Inspect(m_InspectPassDir, &pass,&fail, false);
 	ui.TimePassSpinBox->setValue(m_AvTime);
 	ui.MpixPassSpinBox->setValue((m_ModelImg.width() * m_ModelImg.height())/(1000000 * m_AvTime));
 	ui.tpSpinBox->setValue(pass);
 	ui.fnSpinBox->setValue(fail);
-	ui.MeanLabel->setText(QString("%1").arg(m_pInspect->getMean(0)));
-	ui.SigmaLabel->setText(QString("%1").arg(m_pInspect->getSigma(0)));
-	ui.statusBar->showMessage("Ready",0);
+	bool ExTrain = ui.ExtendedTrainBox->isChecked();
+	ui.ExtendedTrainBox->setChecked(false);
+	if( m_Abort || ExTrain )
+		return;
+	ui.DirActiveLabel->setText("Should FAIL ");
+	Inspect(m_InspectFailDir, &pass,&fail,true);
+	ui.TimeFailSpinBox->setValue(m_AvTime);
+	ui.MpixFailSpinBox->setValue((m_ModelImg.width() * m_ModelImg.height())/(1000000 * m_AvTime));
+	ui.fpSpinBox->setValue(pass);
+	ui.tnSpinBox->setValue(fail);
 
+
+	ui.statusBar->showMessage("Ready",0);
 }
 void DemoQtGUI::Inspect(QString dirname, int *p, int *f, bool expectFail)
 {
+	if(ui.ZScoreButton->isChecked() && !m_Pass2Complete)
+	{
+		QString msg = QString("Must Do TrainPass2 on Object before Doing Inspect\n");
+		LogMsg(msg);
+		QMessageBox("ERROR!",msg,QMessageBox::Icon::Critical,QMessageBox::Button::Ok,0,0).exec();
+		return;
+	}
 	m_Abort = false;
 	m_AvTime = 0.0;	m_ImgCount = 0;
 	int pass=0, fail=0;
@@ -347,10 +369,20 @@ void DemoQtGUI::Inspect(QString dirname, int *p, int *f, bool expectFail)
 	QString imgfilename;
 	QString loadName;
 	QImage img;
+
+	if(ui.ZScoreButton->isChecked())
+		m_pInspect->setInspectThresh(ui.ZScoreSpinBox->value());
+	else
+		m_pInspect->setInspectThresh(ui.InspectThreshSpinBox->value());
+	m_pInspect->setMustAlign(ui.AlignCheckBox->isChecked());
+
 	if(ui.ExtendedTrainBox->isChecked() && !expectFail)
 		m_TrainEx = true;
 	else
 		m_TrainEx = false;
+	m_pInspect->setUseZScoreMode(ui.ZScoreButton->isChecked());
+	m_pInspect->setRawScoreDiv(ui.RawGainSpinBox->value());
+
 	foreach(imgfilename,list)
 	{
 		if(imgfilename.left(4) == QString("mask"))
@@ -373,13 +405,17 @@ void DemoQtGUI::Inspect(QString dirname, int *p, int *f, bool expectFail)
 
 		INSPECTIMAGE InsImg = QImageToInspectImage(img);
 
-		m_pInspect->setRawScoreDiv(ui.RawGainSpinBox->value());
+		int inspectIndex;
 		int failX,failY,failIndex;
-		err = m_pInspect->inspect(InsImg);
-		m_AvTime += m_pInspect->getOpTime(); m_ImgCount++;
-		ui.Score_Value->setText(QString("%1").arg(m_pInspect->getRawScore(&failIndex,&failX,&failY)));
-		ui.FinalScoreLabel->setText(QString("%1").arg(m_pInspect->getFinalScore()));
-
+		err = m_pInspect->inspect(InsImg, &inspectIndex, &failIndex);
+		if(err != CInspect::OK)
+			m_pInspect->getXY(failIndex, &failX, &failY);
+		m_AvTime += m_pInspect->getOpTime();
+		m_ImgCount++;
+		ui.TrueScore_Value->setText(QString("%1").arg(m_pInspect->getTrueScore()));
+		ui.RawScore_Value->setText(QString("%1").arg(m_pInspect->getRawScore(&failIndex)));
+		ui.DScore_Value->setText(QString("%1").arg(m_pInspect->getDScore(&failIndex)));
+		ui.ZScore_Value->setText(QString("%1").arg(m_pInspect->getZScore(&failIndex)));
 
 		INSPECTIMAGE Aligned = m_pInspect->getAlignedImage();
 		QImage alignedQImage;
@@ -395,91 +431,84 @@ void DemoQtGUI::Inspect(QString dirname, int *p, int *f, bool expectFail)
 		}
 
 		int escape;
-		if(err != CInspect::OK)
+		if(m_TrainEx)	// retrain images that should have passed
 		{
-			fail++;
-			ui.Display1->ClearOverlay();
-			CInspectImage A = m_pInspect->getAlignedImage();
-			QImage AlignedImage;
-			InspectImageToQImage(A,AlignedImage);
-			setDisplayImg(AlignedImage);
-			cv::Mat temp;
-			QImage Overlay;
-			if(err == CInspect::FAIL) 
+			while(err != CInspect::OK)
 			{
-				// for FAIL images, show failed tiles on overlay
-				ui.Display2->setHidden(false);
-
-				m_pInspect->DrawRect(failX-20,failY-20,40,40, 0xFFFFFF00);
-				CInspectImage O = m_pInspect->getOverlayImage();
-				InspectImageToQImage(O,Overlay);
-				setOverlayImg(Overlay);
-				ui.Display1->ShowOverlay();
-
-				InspectImageToMatGui(A,temp);
-				cv::copyMakeBorder(temp,temp,20,20,20,20,BORDER_CONSTANT,92);
-				// make 40X40 rect that centers on fail point
-				// boundary provides -20 to coordinates
-				cv::Rect rect = cv::Rect(failX,failY,40,40);
-				temp = temp(rect);
-				temp *= 10;
-				ui.Display2->AttachMat(&temp);
-				ui.Display2->UpdateRoi();
-				if(m_TrainEx)
+				m_pInspect->getXY(failIndex, &failX, &failY);
+				ShowFail(failX,failY);
+				CRetrainDlg dlg(this);
+				escape = dlg.exec();
+				if(escape == CRetrainDlg::NORMAL)	// deemed normal
+					err = m_pInspect->trainEx(failIndex);
+				else if(escape == CRetrainDlg::FLAW)	// deemed flaw
+					m_pInspect->MarkTileSkip(failIndex);
+				else if(escape == CRetrainDlg::ABORT)	// deemed flaw
 				{
-					// retrain images that should pass
-					err = m_pInspect->trainEx(InsImg);
-				}
-			}
-			ui.Display1->UpdateRoi();
-
-			msg = QString(imgfilename + " status: "
-							+ m_pInspect->getErrorString(err).c_str());
-			ui.statusBar->showMessage(msg,10);
-
-			if(!expectFail && ui.RadioButtonPauseIncorrect->isChecked() || ui.RadioButtonPauseEach->isChecked())
-			{
-				QString dirtype = dirname.mid(dirname.lastIndexOf(QChar('\\')));
-				QMessageBox mBox(dirtype,msg + "\n   Wish to Continue? ",QMessageBox::Icon::Question,
-					QMessageBox::Button::Yes, QMessageBox::Button::No,QMessageBox::Button::NoButton);
-				escape = mBox.exec();
-				if( escape == QMessageBox::Button::No )
-				{
-					LogMsg(msg);
-					LogMsg(QString("Selected Do Not Continue"));
 					m_Abort = true;
 					break;
 				}
+				err = m_pInspect->FindNewWorstScore(&failIndex);
 			}
+			if(m_Abort)
+				break;	// out of the foreach
 		}
 		else
 		{
-			pass++;
-			CInspectImage A = m_pInspect->getAlignedImage();
-			QImage AlignedImage;
-			InspectImageToQImage(A,AlignedImage);
-			setDisplayImg(AlignedImage);
-			ui.Display1->UpdateRoi();
-			msg = QString(imgfilename + " status: " + m_pInspect->getErrorString(err).c_str());
-			ui.statusBar->showMessage(msg,10);
-
-			if(expectFail && ui.RadioButtonPauseIncorrect->isChecked() || ui.RadioButtonPauseEach->isChecked())
+			if(err != CInspect::OK)
 			{
+				fail++;
+				ShowFail(failX,failY);
 
-				CExamineDlg dlg;
-				dlg.setImage(AlignedImage);
-				escape = dlg.exec();
-
-				if( escape == QDialog::DialogCode::Rejected ) // only continues if Continue is selected
+				if( (!expectFail && ui.RadioButtonPauseIncorrect->isChecked()) || ui.RadioButtonPauseEach->isChecked())
 				{
-					LogMsg(msg);
-					LogMsg(QString("Examine Dialog Selected ABORT or Close(X)"));
-					m_Abort = true;
-					break;
+
+					CExamineDlg dlg(this);
+					dlg.setImage(alignedQImage);
+					dlg.setWindowTitle(loadName);
+					escape = dlg.exec();
+
+					if( escape == QDialog::DialogCode::Rejected ) // only continues if Continue is selected
+					{
+						LogMsg(msg);
+						LogMsg(QString("Examine Dialog Selected ABORT or Close(X)"));
+						m_Abort = true;
+						break;
+					}
+	
+				}
+
+			}
+			else
+			{
+				// err == OK
+				pass++;
+				CInspectImage A = m_pInspect->getAlignedImage();
+				QImage AlignedImage;
+				InspectImageToQImage(A,AlignedImage);
+				setDisplayImg(AlignedImage);
+				ui.Display1->UpdateRoi();
+				msg = QString(imgfilename + " status: " + m_pInspect->getErrorString(err).c_str());
+				ui.statusBar->showMessage(msg,10);
+
+				if( (expectFail && ui.RadioButtonPauseIncorrect->isChecked()) || ui.RadioButtonPauseEach->isChecked())
+				{
+
+					CExamineDlg dlg(this);
+					dlg.setImage(AlignedImage);
+					dlg.setWindowTitle(loadName);
+					escape = dlg.exec();
+
+					if( escape == QDialog::DialogCode::Rejected ) // only continues if Continue is selected
+					{
+						LogMsg(msg);
+						LogMsg(QString("Examine Dialog Selected ABORT or Close(X)"));
+						m_Abort = true;
+						break;
+					}
 				}
 			}
 		}
-
 		LogMsg(msg);
 	}
 	m_AvTime /= m_ImgCount;
@@ -625,13 +654,13 @@ void DemoQtGUI::setOverlayImg(QImage Ilarge)
 	{
 		temp = qimage_to_mat_ref(Ilarge,CV_8UC4);
 		cv::resize(temp,temp, cvSize(0, 0), m_Imgscale,m_Imgscale);
-		overlay = mat_to_qimage_ref(temp,QImage::Format_ARGB32_Premultiplied);
+		cv::cvtColor(temp,temp,CV_BGRA2RGBA);
+		overlay = mat_to_qimage_ref(temp,QImage::Format_ARGB32);
 	}
 	else
 	{
 		overlay = Ilarge;
 	}
-
 	ui.Display1->SetOverlay(overlay);
 }
 void DemoQtGUI::setDisplayImg(QImage Ilarge)
@@ -658,7 +687,32 @@ void DemoQtGUI::LogMsg(QString msg)
 	QTextStream LogStream(&m_Logfile);
 	LogStream << msg << "\n";
 }
+void DemoQtGUI::ShowFail(int failX,int failY)
+{
+	ui.Display1->ClearOverlay();
+	cv::Mat temp;
+	QImage Overlay;
+	// for FAIL images, show failed tiles on overlay
+	ui.Display2->setHidden(false);
 
+	CInspectImage O = m_pInspect->getOverlayImage();
+	InspectImageToQImage(O,Overlay);
+	DrawBoxQt(Overlay,QRect(failX-10,failY-10,40,40),Qt::yellow);
+	setOverlayImg(Overlay);
+	ui.Display1->ShowOverlay();
+	ui.Display1->UpdateRoi();
+
+	INSPECTIMAGE Aligned = m_pInspect->getAlignedImage();
+	InspectImageToMatGui(Aligned,temp);
+	cv::copyMakeBorder(temp,temp,20,20,20,20,BORDER_CONSTANT,92);
+	// make 40X40 rect that centers on fail point
+	// boundary provides -20 to coordinates
+	cv::Rect rect = cv::Rect(failX-20,failY-20,40,40);
+	temp = temp(rect);
+	temp *= 10;
+	ui.Display2->AttachMat(&temp);
+	ui.Display2->UpdateRoi();
+}
 
 //********************* static Local Functions ***************************
 static void DirDlg(QString &dirName)

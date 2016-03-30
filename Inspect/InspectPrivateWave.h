@@ -27,12 +27,13 @@ public:
 							int tilewidth, int tileheight, int stepcols, int steprows);
 	CInspect::ERR_INSP PreProc();
 	CInspect::ERR_INSP train(cv::Mat &image);
-	CInspect::ERR_INSP trainEx(cv::Mat &image);
+	CInspect::ERR_INSP trainPass2(cv::Mat &image);
 	CInspect::ERR_INSP optimize();
-	CInspect::ERR_INSP inspect(cv::Mat &image);
+	CInspect::ERR_INSP inspect(cv::Mat &image, int *failIndex);
 private:
+	// WAVE requires these overloads to allow two images in the parameters list
 	CInspect::ERR_INSP runExtract2(void (*ExtractProc)(TILE &,cv::Mat &,cv::Mat &,cv::Mat &));
-	CInspect::ERR_INSP runScoring();
+	CInspect::ERR_INSP runScoring2(void (*ExtractProc)(TILE &,cv::Mat &,cv::Mat &,cv::Mat &));
 	cv::Mat m_Integral;
 	cv::Mat m_IntegralRotated;
 };

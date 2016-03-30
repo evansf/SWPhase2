@@ -103,6 +103,8 @@ void QTDisplay::AttachQImage(QImage &img)
 	default:
 		return;
 	}
+	if(m_QImgMat.type() == CV_8U)
+		cv::cvtColor(m_QImgMat,m_QImgMat,CV_GRAY2BGRA);
 	AttachMat(&m_QImgMat);
 }
 

@@ -5,8 +5,6 @@
 #include "opencv2/imgproc/imgproc.hpp"
 #include "opencv2/video/video.hpp"
 
-
-
 using namespace DCT;
 #include "CoVariance.h"
 // *********** forward declarations of static (this file only) functions *********************
@@ -81,109 +79,61 @@ CInspect::ERR_INSP CInspectPrivateDCT::PreProc()
 }
 CInspect::ERR_INSP CInspectPrivateDCT::train(cv::Mat &image)
 {
-	m_TrainMode = TRAIN;
 	// call generic train which calls PreProc() if needed
 	CInspect::ERR_INSP err = CInspectPrivate::train(image);
 	if(err != CInspect::OK)
 		return err;
 
-	err = runScoring();
+	err = runScoring(DCTExtract);
+	if(err != CInspect::OK)
+		return err;
+
+	GlobalLogMsg("**** DCTData ****\n");
+	PrintMat(GetGlobalLog(),&m_FeatMat(cv::Rect(0,100,DCTDATASIZE,1)));
+	m_ModelKnowledge[100].covar.LogCovar();	// Debug of incremental
+
+	return err;
+}
+CInspect::ERR_INSP CInspectPrivateDCT::trainPass2(cv::Mat &image)
+{
+	// call generic train which calls PreProc() if needed
+	CInspect::ERR_INSP err = CInspectPrivate::trainPass2(image);
+	if(err != CInspect::OK)
+		return err;
+
+	err = runScoring(DCTExtract);
 	if(err != CInspect::OK)
 		return err;
 
 	return err;
 }
-CInspect::ERR_INSP CInspectPrivateDCT::trainEx(cv::Mat &image)
-{
-	// call generic inspect which calls PreProc() if needed
-	CInspect::ERR_INSP err = CInspectPrivate::inspect(image);
-	if(err != CInspect::OK)
-		return err;
-	err = CInspectPrivate::trainEx(image);
 
-	return err;
-}
-
-CInspect::ERR_INSP CInspectPrivateDCT::optimize()
+CInspect::ERR_INSP CInspectPrivateDCT::inspect(cv::Mat &image, int *failIndex)
 {
-	CInspect::ERR_INSP err = CInspectPrivate::optimize();
-
-	return err;
-}
-CInspect::ERR_INSP CInspectPrivateDCT::inspect(cv::Mat &image)
-{
-	m_TrainMode = INSPECT;
 	// call generic inspect (calls PreProc() if needed)
-	CInspect::ERR_INSP err = CInspectPrivate::inspect(image);
+	CInspect::ERR_INSP err = CInspectPrivate::inspect(image,failIndex);
 	if(err != CInspect::OK)
 		return err;
 
-	err = runScoring();
+	err = runScoring(DCTExtract);
 	if(err != CInspect::OK)
 		return err;
 
 	// for Inspecting,  return FAIL if different
 	err = CInspect::OK;
-	float Score;
 	m_MahalaCount = 0;
-	m_FinalScore = 1.0F;
-	m_MaxScore = 0.0f;
-	for(int i=0; i<(int)m_TileVec.size(); i++)
-	{
-		TILE &T = m_TileVec[i];
-		Score = m_ModelKnowledge[i].covar.MahalanobisScore(T.scoreRaw, m_RawScoreDiv);
-		m_FinalScore = Score < m_FinalScore ? Score : m_FinalScore; 
-		UpdateRawScore(T);
-		T.status = CInspect::OK;
-		if(Score < m_InspectThresh)	// reject if different
-		{
-			T.status = CInspect::FAIL;
-			err = CInspect::FAIL;
-		}
-		cv::Rect roi;
-		cv::Mat temp;
-		if(T.status == CInspect::FAIL)
-		{
-			annotate(cv::Rect(T.col,T.row,T.tilewidth,T.tileheight));
-		}
-	}
+
+
+	FindNewWorstScore(failIndex);
 
 	return err;
 }
 
-CInspect::ERR_INSP CInspectPrivateDCT::runScoring()
-{
-	CInspect::ERR_INSP err = CInspect::OK;
-//	imshow("500x500",m_pData->m_ImgRun(cv::Rect(0,0,700,700)));
-//	cv::waitKey();
-	switch(m_TrainMode)
-	{
-	case TRAIN:
-		err = runExtract(DCTExtract);
-		err = runTrain();	// use default trainproc
-		break;
-	case INSPECT:
-		err = runExtract(DCTExtract);
-		err = runInspect();	// use default Inspectproc
-		break;
-	default:
-		break;
-	}
-
-	if( (m_DebugFile != NULL) )
-	{
-		cv::Mat temp = m_FeatMat(cv::Rect(0,100,m_FeatMat.cols,1));
-		putFloatMat(m_DebugFile, &temp,"", "\n");
-		putFloatMat(m_DebugFile, m_ModelKnowledge[100].covar.m_pM12,",,,,,","\n");
-	}
-
-	return err;
-}
 
 //*********** Specific Code for Specific Feature data **********************
 static void DCTExtract(TILE &t, cv::Mat &Img,cv::Mat &FeatMat)
 {
-
+	t.status = CInspect::ERR_INSP::OK;
 	cv::Mat temp = Img(cv::Rect(t.col,t.row,t.tilewidth,t.tileheight));
 
 	cv::Mat DCT;
@@ -212,11 +162,7 @@ static void DCTExtract(TILE &t, cv::Mat &Img,cv::Mat &FeatMat)
 		pDCT = (float*)DCT.ptr(2);
 		pFeat[3] = pDCT[0];
 	}
-		if( (t.Index == 100) )
-		{
-			cv::Mat temp = FeatMat(cv::Rect(0,100,FeatMat.cols,1));
-			//putFloatMat(m_DebugFile, &temp);
-		}
+
 	t.datasize = DCTDATASIZE;
 }
 

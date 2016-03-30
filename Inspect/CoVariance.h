@@ -16,13 +16,15 @@ public:
 	cv::Mat &InverseMatrix();
 	cv::Mat &Means() {return m_Mean;};
 	int Samples(){return m_Samples;};
+	void LogCovar();
 
 	float MahalanobisRaw(float *data);
 	float MahalanobisRaw(unsigned char *data);
 	float MahalanobisRaw(cv::Mat &data);
-	float MahalanobisScore(float raw, double expDiv = 200);
+	float DistributionScore(float raw, float DSigma);
 	cv::Mat *m_pM12;
 	double m_detC;
+	double m_detCI;
 
 private:
 	cv::Mat m_Mean;

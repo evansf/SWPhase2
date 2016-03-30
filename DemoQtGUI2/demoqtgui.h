@@ -5,6 +5,7 @@
 #include <QtCore/qfile>
 #include "ui_demoqtgui.h"
 #include "SISUtility.h"
+
 class CInspect;
 
 class DemoQtGUI : public QMainWindow
@@ -19,13 +20,13 @@ public slots:
 	void on_TestFolderLineEdit_textChanged(const QString &);
 	void on_CreateButton_Clicked();
 	void on_TrainButton_Clicked();
+	void on_TrainPass2Button_Clicked();
 	void on_InspectButton_Clicked();
 	void on_RunStatsButton_Clicked();
 	void on_ShowStatsButton_Clicked();
 	void on_OptimizeButton_Clicked();
 	void on_ModeRadioButton_Clicked();
 	void on_InspectTrainButton_Clicked();
-
 	void on_Reset_Clicked();
 
 private:
@@ -49,11 +50,13 @@ private:
 	void makeMask(QString Image0, QString model0, QString Mask0, QString params0);
 	void Inspect(QString dirname, int *pass, int *fail, bool expectFail);
 	void LogMsg(QString s);
+	void ShowFail(int failX, int failY);
 	QFile m_Logfile;
 	bool m_Abort;
 	double m_AvTime;
 	int m_ImgCount;
 	bool m_TrainEx;
+	bool m_Pass2Complete;
 
 	void setDisplayImg(QImage Ilarge);
 	void setOverlayImg(QImage Ilarge);
