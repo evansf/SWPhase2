@@ -12,6 +12,7 @@
 // define error strings
 #define INSPECTSOURCE 1
 #include "inspecterrors.h"
+// include local timer even in release mode
 #define _LOCALTIMER 1
 #include "timer.h"
 #include "SISUtility.h"
@@ -23,6 +24,9 @@ CInspect::CInspect(SISParams &params) :
 		m_pPrivate[i] = NULL;
 	m_InspectionCount = 0;
 	m_pDataGlobal = NULL;
+	m_ZScoreMode = false;
+	m_Pass2 = false;
+	m_WorstInspection = 0;
 }
 
 CInspect::~CInspect(void)
@@ -42,27 +46,65 @@ void CInspect::setRawScoreDiv(float g)
 	for(int i=0; i<NUMINSPECTIONS; i++)
 		if(m_pPrivate[i]) m_pPrivate[i]->setRawScoreDiv(g);
 }
-double CInspect::getRawScore(int *pInspect, int *pX, int *pY)	// most recent Total inspect Score
+double CInspect::getRawScore(int *pInspect)	// most recent Total inspect Score
 {
 	// properties for worst inspection were set durring inspect()
-	if(pX!=NULL) *pX=m_FailX;
-	if(pY!=NULL) *pY=m_FailY;
-	if(pInspect!=NULL) *pInspect = m_WorstInspection;
-	return m_TotalScore;
+	int Index;
+	double score = m_pPrivate[m_WorstInspection]->getRawScore(&Index);
+	if(pInspect!=NULL) *pInspect = Index;
+	return score;
 }
-double CInspect::getFinalScore()
+double CInspect::getDScore(int *pInspect)	// most recent Total inspect Score
+{
+	// properties for worst inspection were set durring inspect()
+	int Index;
+	double score = m_pPrivate[m_WorstInspection]->getDScore(&Index);
+	if(pInspect!=NULL) *pInspect = Index;
+	return score;
+}
+double CInspect::getZScore(int *pInspect)	// most recent Total inspect Score
+{
+	// properties for worst inspection were set durring inspect()
+	int Index;
+	double score = m_pPrivate[m_WorstInspection]->getZScore(&Index);
+	if(pInspect!=NULL) *pInspect = Index;
+	return score;
+}
+double CInspect::getTrueScore()
 {
 	double s;
-	double final = 1.0;
+	double final = 0.0;
 	for(int i=0; i<m_InspectionCount; i++)
 	{
-		s = m_pPrivate[i]->getFinalScore();
-		final = s < final ? s : final;
+		if(m_ZScoreMode)
+		{
+			s = m_pPrivate[i]->getZScore();
+			final = s > final ? s : final;	// big Z fails
+		}
+		else
+		{
+			s = m_pPrivate[i]->getTrueScore();
+			final = s > final ? s : final;	// big Final fails
+		}
 	}
 	return final;
 }
 double CInspect::getMean(int i){return m_pPrivate[i]->getMean();}
 double CInspect::getSigma(int i){return m_pPrivate[i]->getSigma();}
+void CInspect::setUseZScoreMode(bool b)
+{
+	m_ZScoreMode = b;
+	for(int i=0; i<m_InspectionCount; i++)
+		m_pPrivate[i]->setUseZScoreMode(b);
+}
+
+void CInspect::setPass2(bool b)
+{
+	m_Pass2 = b;
+	if(b)
+		for(int i=0; i<m_InspectionCount; i++)
+			m_pPrivate[i]->clearZStats();
+}
 
 CInspect::ERR_INSP CInspect::create(DATATYPE type, CInspectImage image, CInspectImage mask,
 		int tilewidth, int tileheight, int stepcols, int steprows)
@@ -71,6 +113,14 @@ CInspect::ERR_INSP CInspect::create(DATATYPE type, CInspectImage image, CInspect
 	if(m_InspectionCount >= NUMINSPECTIONS)
 		return TOO_MANY_INSPECTIONS;
 
+	if(m_pDataGlobal!= NULL)
+		delete m_pDataGlobal;
+	m_pDataGlobal = NULL;
+	m_ZScoreMode = false;
+	m_Pass2 = false;
+	m_WorstInspection = 0;
+
+	// NEW INSPECTION TYPES -- ADD TO THIS SWITCH AND TO THE ENUM
 	switch(type)
 	{
 	case DCT:
@@ -123,28 +173,22 @@ CInspect::ERR_INSP CInspect::train( CInspectImage image )
 	InspectImageToMat(image, CVImg);
 
 	for(int i=0; i<m_InspectionCount; i++)
-		if(m_pPrivate[i]) err = m_pPrivate[i]->train(CVImg );
+		if(m_pPrivate[i])
+			if(m_Pass2)
+				err = m_pPrivate[i]->trainPass2(CVImg );
+			else
+				err = m_pPrivate[i]->train(CVImg );
 
 	m_isOptimized = false;
 	STOPTIMER(t0);
 	m_OpTime = t0;
 	return err;
 }
-CInspect::ERR_INSP CInspect::trainEx(CInspectImage image) 	// extends training for overlay marked tiles
+CInspect::ERR_INSP CInspect::trainEx(int index) 	// extends training for overlay marked tiles
 {
-	STARTTIMER(t0);
 	CInspect::ERR_INSP err;
-	if(m_pDataGlobal != NULL)	// must start with new data class
-	{
-		delete m_pDataGlobal;
-		m_pDataGlobal = NULL;
-	}
-	cv::Mat CVImg;
-	InspectImageToMat(image, CVImg);
-	for(int i=0; i<m_InspectionCount; i++)
-		if(m_pPrivate[i]) err = m_pPrivate[i]->trainEx(CVImg);
-
-	m_isOptimized = false;
+	STARTTIMER(t0);
+	err = m_pPrivate[m_WorstInspection]->trainEx(index);
 	STOPTIMER(t0);
 	m_OpTime = t0;
 	return err;
@@ -163,7 +207,7 @@ CInspect::ERR_INSP CInspect::optimize()
 	return err;
 }
 
-CInspect::ERR_INSP CInspect::inspect( CInspectImage image, int *pFailIndex )
+CInspect::ERR_INSP CInspect::inspect( CInspectImage image, int *pInspectIndex, int *pFailIndex )
 {
 	STARTTIMER(t0);
 	if(m_pDataGlobal != NULL)
@@ -175,26 +219,56 @@ CInspect::ERR_INSP CInspect::inspect( CInspectImage image, int *pFailIndex )
 	cv::Mat CVImg;
 	InspectImageToMat(image, CVImg);
 
-	m_TotalScore = 0;
+	m_TrueScore = 1.0;
+	m_ZScore = 0.0;
 	double score;
+	CInspect::ERR_INSP errReturn = CInspect::OK;
 	for(int i=0; i<m_InspectionCount; i++)
 	{
 		if(m_pPrivate[i])
 		{
-			err = m_pPrivate[i]->inspect(CVImg );
-			score = m_pPrivate[i]->getRawScore();
-			if(score > m_TotalScore)
+			err = m_pPrivate[i]->inspect(CVImg, pFailIndex );
+			if(m_ZScoreMode)
 			{
-				m_TotalScore = score;
-				m_pPrivate[i]->getRawScore(&m_FailX,&m_FailY);
-				if(pFailIndex!=NULL) *pFailIndex = i;
+				score = m_pPrivate[i]->getZScore();
+				if(score > m_ZScore)	// larger scores fail
+				{
+					m_ZScore = score;
+					m_WorstInspection = i;
+					if(score > m_Threshold)
+						errReturn = FAIL;
+				}
+			}
+			else
+			{
+				m_pPrivate[i]->getRawScore(pFailIndex);
+				score = m_pPrivate[i]->getTrueScore();
+				if(score < m_TrueScore)	// smaller scores fail
+				{
+					m_TrueScore = score;
+					m_WorstInspection = i;
+					if(score < m_Threshold)
+						errReturn = FAIL;
+				}
 			}
 		}
+		if(errReturn != CInspect::OK)
+			break;
 	}
 
 	STOPTIMER(t0);
 	m_OpTime = t0;
-	return err;
+	if(pInspectIndex!=NULL) *pInspectIndex = m_WorstInspection;
+	return errReturn;
+}
+void CInspect::MarkTileSkip(int index)	// Find new worst score will skip this index
+{
+	for(int i=0; i<m_InspectionCount; i++)
+		m_pPrivate[i]->MarkTileSkip(index);
+}
+CInspect::ERR_INSP CInspect::FindNewWorstScore(int *pfailIndex)
+{
+	return m_pPrivate[m_WorstInspection]->FindNewWorstScore(pfailIndex);
 }
 
 std::string & CInspect::getErrorString(ERR_INSP err)
@@ -237,7 +311,7 @@ CInspectImage CInspect::getAlignedImage()
 	case CV_8UC4:
 		Img.Imagetype = imgT::UCHAR_FOURPLANE;
 		break;
-#if(0)
+#if(0)	// unsupported types
 	case CV_16SC1:
 		Img.Imagetype = imgT::SHORT_ONEPLANE;
 		break;
@@ -258,13 +332,14 @@ CInspectImage CInspect::getAlignedImage()
 	return Img;
 }
 
-void CInspect::setLearnThresh(float t)
-{
-	for(int i=0; i<m_InspectionCount; i++)
-		if(m_pPrivate[i]) m_pPrivate[i]->setLearnThresh(t);
-}
 void CInspect::setInspectThresh(float t)
 {
+	m_Threshold = t;
 	for(int i=0; i<m_InspectionCount; i++)
 		if(m_pPrivate[i]) m_pPrivate[i]->setInspectThresh(t);
+}
+
+void CInspect::getXY(int index, int *pX, int *pY)
+{
+	m_pPrivate[m_WorstInspection]->getXY(index, pX, pY);
 }

@@ -3,6 +3,7 @@
 using namespace tbb;
 
 // Each tile region that is inside mask has one of these structures
+// data is supplied by Extract() for each image
 // They are kept in std::vector<TILE> m_TileVec
 class Tile
 {
@@ -15,26 +16,35 @@ public:
 	int tileheight;
 	float scoreRaw;
 	float ZScore;
+	float DScore;
 	CInspect::ERR_INSP status;
 };
 typedef Tile TILE;
 
 // Knowledge without samples to use incremental covar method
 // Each tile region that is inside mask has one of these structures
+// Data accumulates as training proceeds
 // They are kept in std::vector<KNOWLEDGE> m_ModelKnowledge
 class KnowledgeM
 {
 public:
 	CCoVariance covar;	// also contains means
 	float scoreRawMean;
-	float scoreSum, scoreSumSq;
+	float scoreSigmaInv;	// 1.0/Sigma
+	float DSigma;
+	double scoreSum, scoreSumSq;
 	int scoreCount;
+
+	float DScore(float rawScore)
+		{return rawScore/DSigma;};
+	float ZScore(float rawScore)
+		{ return abs(rawScore - scoreRawMean) * scoreSigmaInv; };
 };
 typedef KnowledgeM KNOWLEDGE;
 
 // This struct is filled in with data references and (*proc)
-// by the Constructor.  It is used by the parallel library
-// to do the actual call for each tile in the vector tiles.
+// by the Constructor.  It is used by the tbb parallel library
+// to do the actual call for each tile in the vector 'tiles'.
 // The result is creation of the features vector for each tile
 // as created by the extract Proc,  (*proc)
 struct TileEval
@@ -54,8 +64,8 @@ struct TileEval
 };
 
 // This struct is filled in with data references and (*proc)
-// by the Constructor.  It is used by the parallel library
-// to do the actual call for each tile in the vector tiles.
+// by the Constructor.  It is used by the tbb parallel library
+// to do the actual call for each tile in the vector 'tiles'.
 // The result is creation of a score for the features vector
 //  for each tile as specified by by the Scoring Proc,  (*proc)
 struct TileScore

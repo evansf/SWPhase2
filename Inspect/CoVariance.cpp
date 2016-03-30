@@ -1,13 +1,14 @@
 #include "CoVariance.h"
 #include "opencv2/core/core.hpp"
-
+#include "SISUtility.h"
+#define _USE_MATH_DEFINES
+#include <math.h>
 
 CCoVariance::CCoVariance(void)
 {
 	m_pM12 = NULL;
 	m_Samples = 0;
 }
-
 
 CCoVariance::~CCoVariance(void)
 {
@@ -81,7 +82,6 @@ void CCoVariance::IncrementalUpdate(float* data, int count)
 			pF[j] = factor * ( m_Samples * (pF[j] + factor * ( pD[i] * pD[j] )) );
 		}
 	}
-
 	m_Samples++;
 }
 void CCoVariance::IncrementalUpdate(unsigned char* data, int count)
@@ -99,6 +99,7 @@ int CCoVariance::Invert()
 	}
 	cv::Mat covar = (*m_pM12);
 	m_detC = cv::determinant(covar);
+
 	if(m_detC <= FLT_EPSILON)
 	{
 		float *pF;
@@ -108,11 +109,13 @@ int CCoVariance::Invert()
 			pF[i] = abs(pF[i]) <= FLT_EPSILON ? 0.1F : pF[i];
 		}
 	}
+
 	if(cv::invert(covar,m_CovarInverse,cv::DECOMP_SVD) == 0.0)
 	{
-		m_CovarInverse = cv::Mat::eye(m_CovarInverse.size(),CV_32F);
+		m_CovarInverse = cv::Mat::eye(covar.size(),CV_32F);
 		return -1;
 	}
+	m_detCI = cv::determinant(m_CovarInverse);
 	return 0;
 }
 
@@ -175,21 +178,18 @@ float CCoVariance::MahalanobisRaw(float *Data)
 	cv::Mat data(m_Mean.size(),CV_32F);
 	return MahalanobisRaw(data);
 }
-float CCoVariance::MahalanobisRaw(unsigned char *Data)
+
+float CCoVariance::DistributionScore(float raw, float DSigma)
 {
-	cv::Mat data(m_Mean.size(),CV_32F);
-	float* pF = (float*)data.ptr();
-	for(int i=0; i<m_Mean.cols; i++)
-		pF[i] = (float)(Data[i]);
-	return MahalanobisRaw(data);
+	float dist;
+	dist = (float)(0.5 * M_1_PI / DSigma * exp(- raw*raw / ( 2.0 * DSigma )));
+	return dist;
 }
 
-float CCoVariance::MahalanobisScore(float raw, double expDivisor)
+void CCoVariance::LogCovar()
 {
-	// need a score of 1.0 for perfect and 0.0 for worst
-
-	float factor = (float)(-1.0 / expDivisor);
-	float score = 	 exp( factor * raw );
-
-	return score;
+	char msg[200];
+	sprintf(msg,"LogCovar -- Count = %d\n",m_Samples);
+	GlobalLogMsg(msg);
+	PrintMat(GetGlobalLog(),m_pM12);
 }

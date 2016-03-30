@@ -38,7 +38,6 @@ int SISParams::read(const char* filename)
 			m_x=x;m_y=y;m_w=w;m_h=h;
 			break;
 		case 'A':	// Align Rectangles
-//			m_AlignModels.clear();
 			int count;
 			GETLINE(pFile,line);
 			sscanf_s(line,"%d",&count);
@@ -85,7 +84,6 @@ int SISParams::write(const char* filename)
 	for(int i=0; i<m_ModelCount; i++)
 	{
 		m_Models[i].save(pFile);
-//		m_AlignModels[i].save(pFile);
 	}
 	fprintf(pFile,"# DisplayScaling\nSCALE\n");
 	fprintf(pFile, "%6.2f\n",m_DisplayScale);
@@ -184,11 +182,6 @@ void Variance(cv::Mat &src, cv::Mat &dst, int tilesize)
 		src.convertTo(temp,CV_8UC1,1.0/256.0);
 	else
 		temp = src;
-#if(0)
-	cv::Mat HistEq;
-	cv::equalizeHist( temp, HistEq );
-	temp = HistEq;
-#endif
 
 	// Make integral image
 	cv::Mat sumX;
@@ -236,4 +229,35 @@ void Variance(cv::Mat &src, cv::Mat &dst, int tilesize)
 		}
 	}
 
+}
+
+FILE *pGlobalLogFile = NULL;
+FILE *GetGlobalLog()
+{
+	if(pGlobalLogFile == NULL)
+		fopen_s(&pGlobalLogFile,"C:\\SIS\\GlobalLog.txt","w");
+	return pGlobalLogFile;
+}
+void GlobalLogMsg(char* str)
+{
+	if(pGlobalLogFile == NULL)
+		GetGlobalLog();
+	fprintf(pGlobalLogFile,"%s",str);
+}
+void PrintMat(FILE *F, cv::Mat *pM)
+{
+	char msg[200];
+	float *pF;
+	for(int i=0; i<pM->rows; i++)
+	{
+		pF = (float*)pM->ptr(i);
+		sprintf(msg,"%8.3f",pF[0]);
+		GlobalLogMsg(msg);
+		for(int j=1; j<pM->cols; j++)
+		{
+			sprintf(msg,",%8.3f",pF[j]);
+			GlobalLogMsg(msg);
+		}
+		GlobalLogMsg("\n");
+	}
 }

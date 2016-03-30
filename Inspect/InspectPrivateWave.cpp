@@ -96,80 +96,58 @@ CInspect::ERR_INSP CInspectPrivateWave::PreProc()
 }
 CInspect::ERR_INSP CInspectPrivateWave::train(cv::Mat &image)
 {
-	m_TrainMode = TRAIN;
 	// call generic train which calls PreProc() if needed
 	CInspect::ERR_INSP err = CInspectPrivate::train(image);
 	if(err != CInspect::OK)
 		return err;
 
-	err = runScoring();
+	err = runScoring2(WaveExtract);
 	if(err != CInspect::OK)
 		return err;
 
 	return err;
 }
-CInspect::ERR_INSP CInspectPrivateWave::trainEx(cv::Mat &image)
+CInspect::ERR_INSP CInspectPrivateWave::trainPass2(cv::Mat &image)
 {
-	// call generic inspect which calls PreProc() if needed
-	CInspect::ERR_INSP err = CInspectPrivate::inspect(image);
+	// call generic train which calls PreProc() if needed
+	CInspect::ERR_INSP err = CInspectPrivate::trainPass2(image);
 	if(err != CInspect::OK)
 		return err;
-	err = CInspectPrivate::trainEx(image);
+
+	err = runScoring2(WaveExtract);
+	if(err != CInspect::OK)
+		return err;
 
 	return err;
 }
 
-CInspect::ERR_INSP CInspectPrivateWave::optimize()
+CInspect::ERR_INSP CInspectPrivateWave::inspect(cv::Mat &image, int *failIndex)
 {
-	CInspect::ERR_INSP err = CInspectPrivate::optimize();
-
-	return err;
-}
-CInspect::ERR_INSP CInspectPrivateWave::inspect(cv::Mat &image)
-{
-	m_TrainMode = INSPECT;
 	// call generic inspect (calls PreProc() if needed)
-	CInspect::ERR_INSP err = CInspectPrivate::inspect(image);
+	CInspect::ERR_INSP err = CInspectPrivate::inspect(image,failIndex);
 	if(err != CInspect::OK)
 		return err;
 
-	err = runScoring();
+	err = runScoring2(WaveExtract);
 	if(err != CInspect::OK)
 		return err;
 
 	// for Inspecting,  return FAIL if different
-	m_MaxScore = 0.0f;
 	err = CInspect::OK;
 
 	m_MahalaCount = 0;
-	m_FinalScore = 1.0F;
-	float Score;
-	for(int i=0; i<(int)m_TileVec.size(); i++)
-	{
-		TILE &T = m_TileVec[i];
-		Score = m_ModelKnowledge[i].covar.MahalanobisScore(T.scoreRaw, m_RawScoreDiv);
-		m_FinalScore = Score < m_FinalScore ? Score : m_FinalScore; 
-		UpdateRawScore(T);
-		T.status = CInspect::OK;
-		if(Score < m_InspectThresh)	// reject if different
-		{
-			T.status = CInspect::FAIL;
-			err = CInspect::FAIL;
-		}
-		cv::Rect roi;
-		cv::Mat temp;
-		if(T.status == CInspect::FAIL)
-		{
-			annotate(cv::Rect(T.col,T.row,T.tilewidth,T.tileheight));
-		}
-	}
+
+	FindNewWorstScore(failIndex);
+
 	return err;
 }
 
-CInspect::ERR_INSP CInspectPrivateWave::runScoring()
+// Extraction for WAVE involves two images (Integral and IntegralRotated)
+// These RunScorring2 and RunExtract2 overloads are needed to accomodate the two images
+CInspect::ERR_INSP CInspectPrivateWave::runScoring2(void (*ExtractProc)(TILE &,cv::Mat &,cv::Mat &,cv::Mat &))
 {
 	CInspect::ERR_INSP err = CInspect::OK;
-	err = runExtract2(WaveExtract);
+	err = runExtract2(ExtractProc);
 
 	switch(m_TrainMode)
 	{
@@ -220,6 +198,8 @@ CInspect::ERR_INSP CInspectPrivateWave::runExtract2(void (*ExtractProc)(TILE &,c
 #define CENTER (*(pBRM-Sx) - *(pTRM-Sx) + *(pTLM+Sx) - *(pBLM+Sx))
 static void WaveExtract(TILE &t, cv::Mat &Integral, cv::Mat &IntegtralRotated, cv::Mat &FeatMat)
 {
+	t.status = CInspect::ERR_INSP::OK;
+
 	// m_ImgRun already transformed by wavelet xfrm
 	float* pFeat = (float*)FeatMat.ptr(t.Index);
 	cv::Mat temp;
@@ -285,11 +265,6 @@ static void WaveExtract(TILE &t, cv::Mat &Integral, cv::Mat &IntegtralRotated, c
 		*pFeat++ = (float)(TotalBox - 4 * CENTER); 
 
 	}
-		if( (t.Index == 100) )
-		{
-			cv::Mat temp = FeatMat(cv::Rect(0,100,FeatMat.cols,1));
-			//putFloatMat(m_DebugFile, &temp);
-		}
 	t.datasize = WAVEDATASIZE;
 }
 

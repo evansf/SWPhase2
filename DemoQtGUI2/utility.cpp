@@ -1,6 +1,7 @@
 #include "utility.h"
 #include "opencv2/imgproc/imgproc.hpp"
 #include "opencv2/highgui/highgui.hpp"
+#include <qpainter>
 #include "Qt_CV.h"
 
 INSPECTIMAGE QImageToInspectImage(QImage &img)
@@ -70,4 +71,19 @@ void InspectImageToMatGui(INSPECTIMAGE &img, cv::Mat &I)
 		break;
 	}
 	I = temp;
+}
+
+void DrawBoxQt(QImage &Img, QRect rect, QColor color)
+{
+	QPainter p;
+	QPen pen;
+	QColor c = color;
+	// QColor is ARGB  QtOverlay is opencv - ABGR
+	c.setBlue(color.red()); c.setRed(color.blue());
+	pen.setColor(c);
+	pen.setWidth(5);
+	p.begin(&Img);
+	p.setPen(pen);
+	p.drawRect(rect);
+	p.end();
 }

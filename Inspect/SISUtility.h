@@ -74,4 +74,9 @@ float INSPECTAPI Contrast(cv::Mat src, int x, int  y, int tilesize);
 void INSPECTAPI Variance(cv::Mat &src, cv::Mat &dst, int tilesize);
 int INSPECTAPI GetRandInt(int from, int to);
 
+extern FILE *pGlobalLogFile;
+FILE *GetGlobalLog();
+void GlobalLogMsg(char* str);
+void PrintMat(FILE *F, cv::Mat *pM);
+
 #endif	// SISUTILITYHEADER

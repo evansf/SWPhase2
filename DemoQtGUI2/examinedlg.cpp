@@ -13,6 +13,9 @@ CExamineDlg::CExamineDlg(QWidget *parent)
 	: QDialog(parent)
 {
 	ui.setupUi(this);
+	QRect ParentRect = parent->geometry();
+	setGeometry(ParentRect.x(),ParentRect.height(),width(),height());
+
 	ui.Display1->setDisplayMode(QTDisplay::FIT_SCALE);
 	m_DrawMode = OFF;
 	ui.Display1->SetSnap(SNAP);	// closer closes polygon

@@ -71,8 +71,6 @@ private:
 	QPixmap m_Mask;	// scaled down for display
 	QPixmap OverlayPixmap;
 	QString ParamsFile;
-//	std::vector<std::pair<float,float>> TrackPoints;
-//	bool m_CreateTrackPoints;
 	QString ModelFile;
 	int m_AlignMoveIndex;
 	SISParams m_Params;

@@ -72,101 +72,52 @@ CInspect::ERR_INSP CInspectPrivateIntensity::PreProc()
 
 CInspect::ERR_INSP CInspectPrivateIntensity::train(cv::Mat &image)
 {
-	m_TrainMode = TRAIN;
 	// call generic train which calls PreProc() if needed
 	CInspect::ERR_INSP err = CInspectPrivate::train(image);
 	if(err != CInspect::OK)
 		return err;
 	
-	err = runScoring();
+	err = runScoring(IntensityExtract);
 	if(err != CInspect::OK)
 		return err;
 
 	return err;
 
 }
-CInspect::ERR_INSP CInspectPrivateIntensity::trainEx(cv::Mat &image)
+CInspect::ERR_INSP CInspectPrivateIntensity::trainPass2(cv::Mat &image)
 {
-	// call generic inspect which calls PreProc() if needed
-	CInspect::ERR_INSP err = CInspectPrivate::inspect(image);
+	// call generic train which calls PreProc() if needed
+	CInspect::ERR_INSP err = CInspectPrivate::trainPass2(image);
 	if(err != CInspect::OK)
 		return err;
-	err = CInspectPrivate::trainEx(image);
+	
+	err = runScoring(IntensityExtract);
+	if(err != CInspect::OK)
+		return err;
 
 	return err;
+
 }
 
 #define ZEROGAIN (0.05F)
-CInspect::ERR_INSP CInspectPrivateIntensity::optimize()
-{
-	CInspect::ERR_INSP err = CInspectPrivate::optimize();
 
-	return err;
-}
-CInspect::ERR_INSP CInspectPrivateIntensity::inspect(cv::Mat &image)
+CInspect::ERR_INSP CInspectPrivateIntensity::inspect(cv::Mat &image, int *failIndex)
 {
-	m_TrainMode = INSPECT;
 	// call generic inspect (calls PreProc() if needed)
-	CInspect::ERR_INSP err = CInspectPrivate::inspect(image);
+	CInspect::ERR_INSP err = CInspectPrivate::inspect(image,failIndex);
 	if(err != CInspect::OK)
 		return err;
 
-	err = runScoring();
+	err = runScoring(IntensityExtract);
 	if(err != CInspect::OK)
 		return err;
 
 	// for Inspecting,  return FAIL if different
-	m_MaxScore = 0.0f;
 	err = CInspect::OK;
 	m_MahalaCount = 0;
-	m_FinalScore = 1.0F;
-	float Score;
-	for(int i=0; i<(int)m_TileVec.size(); i++)
-	{
-		TILE &T = m_TileVec[i];
-		Score = m_ModelKnowledge[i].covar.MahalanobisScore(T.scoreRaw, m_RawScoreDiv);
-		m_FinalScore = Score < m_FinalScore ? Score : m_FinalScore; 
-		UpdateRawScore(T);
-		T.status = CInspect::OK;
-		if(Score < m_InspectThresh)	// reject if different
-		{
-			T.status = CInspect::FAIL;
-			err = CInspect::FAIL;
-		}
-		cv::Rect roi;
-		cv::Mat temp;
-		if(T.status == CInspect::FAIL)
-		{
-			annotate(cv::Rect(T.col,T.row,T.tilewidth,T.tileheight));
-		}
-	}
-	return err;
-}
 
-CInspect::ERR_INSP CInspectPrivateIntensity::runScoring()
-{
-	CInspect::ERR_INSP err = CInspect::OK;
-	err = runExtract(        IntensityExtract);
-//	err = runExtract(RelativeIntensityExtract);
 
-	switch(m_TrainMode)
-	{
-		case TRAIN:
-			err = runTrain();	// use default trainproc
-			break;
-		case INSPECT:
-			err = runInspect();	// use default Inspectproc
-			break;
-		default:
-			break;
-	}
-
-	if( (m_DebugFile != NULL) )
-	{
-		cv::Mat temp = m_FeatMat(cv::Rect(0,100,m_FeatMat.cols,1));
-		putFloatMat(m_DebugFile, &temp,"", "\n");
-		putFloatMat(m_DebugFile, m_ModelKnowledge[100].covar.m_pM12,",,,,,","\n");
-	}
+	FindNewWorstScore(failIndex);
 
 	return err;
 }
@@ -174,6 +125,7 @@ CInspect::ERR_INSP CInspectPrivateIntensity::runScoring()
 //*********** Specific Code for Specific Feature data **********************
 static void RelativeIntensityExtract(TILE &t, cv::Mat &Img, cv::Mat &FeatMat)
 {
+	t.status = CInspect::ERR_INSP::OK;
 	cv::Mat temp = Img(cv::Rect(t.col,t.row,t.tilewidth,t.tileheight));
 	cv::Scalar sum = cv::sum(temp);
 	float inverse = (float)(1.0 / sum[0]);
@@ -192,9 +144,8 @@ static void RelativeIntensityExtract(TILE &t, cv::Mat &Img, cv::Mat &FeatMat)
 }
 static void IntensityExtract(TILE &t, cv::Mat &Img, cv::Mat &FeatMat)
 {
+	t.status = CInspect::ERR_INSP::OK;
 	cv::Mat temp = Img(cv::Rect(t.col,t.row,t.tilewidth,t.tileheight));
-//	cv::Scalar sum = cv::sum(temp);	// keep sum to normalize
-//	float inverse = (float)(1.0 / sum[0]);
 	float* pU = (float*)FeatMat.ptr(t.Index);
 	float* pPix;
 	for(int i=0; i<t.tileheight; i++)
@@ -202,7 +153,6 @@ static void IntensityExtract(TILE &t, cv::Mat &Img, cv::Mat &FeatMat)
 		pPix = (float*)temp.ptr(i);
 		for(int j=0; j<t.tilewidth; j++)
 		{
-//			pU[j] = inverse * pPix[j];
 			pU[j] =           pPix[j];
 		}
 		pU += t.tilewidth;

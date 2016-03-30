@@ -71,15 +71,6 @@
     <ClCompile Include="GeneratedFiles\Release\moc_ROCdlg.cpp">
       <Filter>Generated Files\Release</Filter>
     </ClCompile>
-    <ClCompile Include="GeneratedFiles\Debug\moc_Histdlg.cpp">
-      <Filter>Generated Files\Debug</Filter>
-    </ClCompile>
-    <ClCompile Include="GeneratedFiles\Release\moc_Histdlg.cpp">
-      <Filter>Generated Files\Release</Filter>
-    </ClCompile>
-    <ClCompile Include="Histdlg.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="examinedlg.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -88,6 +79,15 @@
     </ClCompile>
     <ClCompile Include="GeneratedFiles\Release\moc_examinedlg.cpp">
       <Filter>Generated Files\Release</Filter>
+    </ClCompile>
+    <ClCompile Include="GeneratedFiles\Debug\moc_Retraindlg.cpp">
+      <Filter>Generated Files\Debug</Filter>
+    </ClCompile>
+    <ClCompile Include="GeneratedFiles\Release\moc_Retraindlg.cpp">
+      <Filter>Generated Files\Release</Filter>
+    </ClCompile>
+    <ClCompile Include="Retraindlg.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -112,16 +112,16 @@
     <CustomBuild Include="ROCdlg.h">
       <Filter>Header Files</Filter>
     </CustomBuild>
-    <CustomBuild Include="HistDlg.ui">
-      <Filter>Form Files</Filter>
-    </CustomBuild>
-    <CustomBuild Include="Histdlg.h">
-      <Filter>Header Files</Filter>
-    </CustomBuild>
     <CustomBuild Include="ExamineDlg.ui">
       <Filter>Form Files</Filter>
     </CustomBuild>
     <CustomBuild Include="examinedlg.h">
+      <Filter>Header Files</Filter>
+    </CustomBuild>
+    <CustomBuild Include="RetrainDlg.ui">
+      <Filter>Form Files</Filter>
+    </CustomBuild>
+    <CustomBuild Include="Retraindlg.h">
       <Filter>Header Files</Filter>
     </CustomBuild>
   </ItemGroup>
@@ -141,14 +141,17 @@
     <ClInclude Include="GeneratedFiles\ui_ROCDlg.h">
       <Filter>Generated Files</Filter>
     </ClInclude>
-    <ClInclude Include="GeneratedFiles\ui_HistDlg.h">
+    <ClInclude Include="GeneratedFiles\ui_ExamineDlg.h">
       <Filter>Generated Files</Filter>
     </ClInclude>
-    <ClInclude Include="GeneratedFiles\ui_ExamineDlg.h">
+    <ClInclude Include="GeneratedFiles\ui_RetrainDlg.h">
       <Filter>Generated Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="DemoQtGUI.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="InstallToLaptop.bat" />
   </ItemGroup>
 </Project>

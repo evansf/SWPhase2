@@ -1,6 +1,8 @@
 // not protected from including more than once
 // this file is included when inspect.h is included
 // it is ALSO included when inspect.cpp is compiled
+// Please define INSPECTSOURCE when compiling Inspect Library
+// Please DO NOT define INSPECTSOURCE when USING library
 
 #ifndef INSPECTSOURCE
 // include error typedef for Inspect.h header

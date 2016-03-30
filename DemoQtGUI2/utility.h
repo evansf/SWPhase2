@@ -8,5 +8,6 @@
 void InspectImageToMatGui(INSPECTIMAGE &img, cv::Mat &I);
 INSPECTIMAGE QImageToInspectImage(QImage &img);
 void InspectImageToQImage(INSPECTIMAGE &img, QImage &I);
+void DrawBoxQt(QImage &Img, QRect rect, QColor color);
 
 #endif  //  UTILITYHEADER
